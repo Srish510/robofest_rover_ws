@@ -31,6 +31,19 @@ An autonomous ground rover built with **ROS 2 Humble** that follows yellow lane 
 - Python 3 packages: `pyrealsense2`, `opencv-python`, `pyzbar`, `pyserial`, `numpy`
 - ROS 2 packages: `cv_bridge`, `tf2_ros`, `rtabmap_ros`, `nav2_bringup`, `nav2_bt_navigator`, `nav2_controller`, `nav2_planner`, `nav2_behaviors`, `nav2_lifecycle_manager`, `nav2_costmap_2d`
 
+### Install Dependencies
+
+```bash
+# System dependencies (required by pyzbar)
+sudo apt install libzbar0
+
+# ROS dependencies
+rosdep install --from-paths src --ignore-src -r -y
+
+# Python dependencies
+pip install -r requirements.txt
+```
+
 ### Build
 
 ```bash
