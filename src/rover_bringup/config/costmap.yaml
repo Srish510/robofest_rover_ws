@@ -1,0 +1,13 @@
+# ─── Costmap Configuration ───
+# All Nav2 costmap parameters are defined in nav2_params.yaml
+# under local_costmap and global_costmap sections.
+#
+# Local costmap layers:
+#   - voxel_layer: Depth camera obstacle detection (perception/slam_point_cloud)
+#   - lane_boundary_layer: Yellow lane boundaries (navigation/lane_costmap)
+#   - inflation_layer: Obstacle inflation for safe path planning
+#
+# Global costmap layers:
+#   - static_layer: RTAB-Map SLAM occupancy grid (rtabmap/grid_map)
+#   - obstacle_layer: Real-time depth camera obstacles
+#   - inflation_layer: Obstacle inflation

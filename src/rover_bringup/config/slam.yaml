@@ -1,0 +1,24 @@
+# ─── SLAM & 3D Terrain Mapping Parameters ───
+# Used by terrain_mapper and referenced by slam_3d.launch.py
+
+terrain_mapper:
+  ros__parameters:
+    # Grid cell size for terrain analysis (meters)
+    cell_resolution_m: 0.10
+    # Maximum map extent (meters, caps memory usage)
+    map_size_m: 30.0
+    # Slope beyond this angle is classified as TERRAIN_SLOPE (radians, ~20 deg)
+    slope_threshold_rad: 0.35
+    # Surface roughness (std dev) beyond this is TERRAIN_ROUGH (meters)
+    rough_threshold_m: 0.05
+    # Height range for obstacle classification (meters)
+    obstacle_height_min_m: 0.15
+    obstacle_height_max_m: 2.0
+    # Abrupt height change threshold (meters)
+    step_height_m: 0.08
+    # Minimum point observations per cell before classification
+    min_points_per_cell: 3
+    # Terrain map publish rate (Hz)
+    update_rate_hz: 2.0
+    # Maximum range for point ingestion (meters)
+    max_range_m: 10.0

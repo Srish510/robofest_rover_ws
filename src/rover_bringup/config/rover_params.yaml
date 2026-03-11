@@ -1,0 +1,140 @@
+# ─── Rover Parameters Configuration ───
+# Tune these values for your specific hardware setup
+
+# ─── Perception ───
+realsense_node:
+  ros__parameters:
+    color_width: 640
+    color_height: 480
+    depth_width: 640
+    depth_height: 480
+    fps: 30
+    enable_imu: true
+    align_depth: true
+
+lane_detector:
+  ros__parameters:
+    # HSV thresholds for yellow lane lines
+    # Adjust these based on lighting conditions
+    yellow_h_low: 20
+    yellow_h_high: 35
+    yellow_s_low: 80
+    yellow_s_high: 255
+    yellow_v_low: 80
+    yellow_v_high: 255
+    min_contour_area: 500
+    roi_top_ratio: 0.4
+    gaussian_blur_size: 5
+    camera_height_m: 0.3
+    camera_pitch_rad: 0.5
+
+obstacle_detector:
+  ros__parameters:
+    min_depth_m: 0.3
+    max_depth_m: 5.0
+    obstacle_height_threshold_m: 0.10
+    ground_plane_tolerance_m: 0.05
+    min_cluster_points: 50
+    velocity_threshold_m_s: 0.1
+    depth_scale: 0.001
+
+depth_processor:
+  ros__parameters:
+    depth_scale: 0.001
+    min_depth_m: 0.3
+    max_depth_m: 5.0
+    voxel_size_m: 0.05
+    map_resolution_m: 0.05
+    map_width_m: 10.0
+    map_height_m: 10.0
+    obstacle_height_min_m: 0.10
+    obstacle_height_max_m: 2.0
+    camera_height_m: 0.3
+
+qr_scanner:
+  ros__parameters:
+    scan_interval_sec: 0.5
+    min_qr_size: 50
+    deduplicate_timeout_sec: 30.0
+
+# ─── Control ───
+esp32_bridge:
+  ros__parameters:
+    serial_port: /dev/ttyUSB0
+    baud_rate: 115200
+    serial_timeout: 0.05
+    wheelbase_m: 0.3
+    track_width_m: 0.3
+    max_motor_speed: 1.0
+    max_servo_angle_rad: 0.5
+    publish_rate_hz: 50.0
+
+motor_interface:
+  ros__parameters:
+    max_linear_speed: 0.5
+    max_angular_speed: 1.5
+    lane_kp: 1.2
+    lane_kd: 0.3
+    heading_kp: 1.0
+    obstacle_stop_distance: 0.5
+    obstacle_slow_distance: 1.5
+    obstacle_avoidance_angular: 0.8
+    lane_confidence_threshold: 0.3
+    control_rate_hz: 20.0
+    cmd_timeout_sec: 0.5
+
+odometry_node:
+  ros__parameters:
+    publish_tf: true
+    odom_rate_hz: 50.0
+    speed_scale: 1.0
+
+# ─── Navigation ───
+goal_manager:
+  ros__parameters:
+    default_forward_speed: 0.3
+    checkpoint_approach_speed: 0.15
+    checkpoint_stop_duration_sec: 3.0
+    no_lane_timeout_sec: 2.0
+    obstacle_critical_dist: 0.4
+    control_rate_hz: 10.0
+
+lane_costmap_layer:
+  ros__parameters:
+    costmap_resolution: 0.05
+    costmap_width_m: 4.0
+    costmap_height_m: 4.0
+    lane_boundary_cost: 100
+    outside_lane_cost: 100
+    inside_lane_cost: 0
+    boundary_width_cells: 3
+    camera_height_m: 0.3
+    publish_rate_hz: 5.0
+
+planner_helper:
+  ros__parameters:
+    num_sectors: 36
+    sector_threshold: 0.3
+    max_obstacle_range: 3.0
+    safety_margin_m: 0.3
+    preferred_direction_rad: 0.0
+    publish_rate_hz: 10.0
+
+# ─── Communication ───
+video_stream_node:
+  ros__parameters:
+    stream_port: 8080
+    jpeg_quality: 70
+    max_fps: 15
+    resize_width: 640
+    resize_height: 480
+
+map_stream_node:
+  ros__parameters:
+    map_port: 8081
+    update_rate_hz: 2.0
+
+telemetry_node:
+  ros__parameters:
+    telemetry_port: 8082
+    update_rate_hz: 5.0

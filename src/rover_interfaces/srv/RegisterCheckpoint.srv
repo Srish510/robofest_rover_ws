@@ -1,0 +1,9 @@
+# Request
+string qr_data
+geometry_msgs/Pose rover_pose
+builtin_interfaces/Time timestamp
+---
+# Response
+bool success
+string checkpoint_id
+string message

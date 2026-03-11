@@ -1,0 +1,99 @@
+# ─── RTAB-Map 3D SLAM Configuration ───
+# Optimized for Intel RealSense D435i on a ground rover
+
+rtabmap:
+  ros__parameters:
+    # ─── General ───
+    frame_id: base_link
+    odom_frame_id: odom
+    map_frame_id: map
+    subscribe_depth: true
+    subscribe_rgb: true
+    subscribe_odom_info: false
+    approx_sync: true
+    queue_size: 10
+
+    # ─── Memory Management ───
+    # Limit memory usage for embedded systems
+    Mem/IncrementalMemory: "true"
+    Mem/InitWMWithAllNodes: "false"
+    Mem/STMSize: "30"
+    Mem/RecentWmRatio: "0.2"
+
+    # ─── Loop Closure Detection ───
+    Rtabmap/DetectionRate: "2.0"
+    Rtabmap/TimeThr: "0"
+    Rtabmap/MemoryThr: "0"
+
+    # ─── Visual Features ───
+    Kp/MaxFeatures: "400"
+    Kp/DetectorStrategy: "6"       # ORB (fast, good for embedded)
+    Kp/NNStrategy: "1"             # KD-tree
+
+    # ─── Visual Odometry ───
+    Odom/Strategy: "0"             # Frame-to-Map (more robust)
+    Odom/ResetCountdown: "1"
+    Odom/GuessMotion: "true"
+    Vis/MinInliers: "15"
+    Vis/InlierDistance: "0.1"
+    Vis/MaxFeatures: "600"
+    Vis/FeatureType: "6"           # ORB
+
+    # ─── 3D Point Cloud Map ───
+    Grid/FromDepth: "true"
+    Grid/MaxObstacleHeight: "2.0"
+    Grid/MinGroundHeight: "0.0"
+    Grid/MaxGroundHeight: "0.10"
+    Grid/CellSize: "0.05"
+    Grid/ClusterRadius: "0.1"
+    Grid/MinClusterSize: "10"
+    Grid/NormalsSegmentation: "true"
+    Grid/RangeMax: "5.0"
+    Grid/RangeMin: "0.3"
+    Grid/NoiseFilteringRadius: "0.1"
+    Grid/NoiseFilteringMinNeighbors: "3"
+    Grid/3D: "true"
+    Grid/GroundIsObstacle: "false"
+
+    # ─── Occupancy Grid ───
+    Grid/Sensor: "1"               # Depth camera
+    GridGlobal/MinSize: "20.0"
+    GridGlobal/UpdateError: "0.01"
+    GridGlobal/FootprintRadius: "0.2"
+    GridGlobal/Eroded: "true"
+
+    # ─── Optimizer ───
+    Optimizer/Strategy: "1"        # g2o
+    Optimizer/Iterations: "20"
+    Optimizer/Slam2D: "false"      # 3D SLAM
+    Optimizer/GravitySigma: "0.3"  # Use IMU gravity for pitch/roll
+    RGBD/OptimizeMaxError: "3.0"
+
+    # ─── Proximity Detection ───
+    RGBD/ProximityBySpace: "true"
+    RGBD/ProximityMaxGraphDepth: "50"
+    RGBD/ProximityPathMaxNeighbors: "10"
+    RGBD/AngularUpdate: "0.1"     # rad (trigger new node)
+    RGBD/LinearUpdate: "0.1"      # m (trigger new node)
+    RGBD/CreateOccupancyGrid: "true"
+    RGBD/MarkerDetection: "false"
+    RGBD/NeighborLinkRefining: "true"
+    RGBD/LocalBundleOnLoopClosure: "true"
+
+    # ─── ICP (for loop closure refinement) ───
+    Icp/MaxCorrespondenceDistance: "0.15"
+    Icp/Iterations: "30"
+    Icp/VoxelSize: "0.05"
+    Icp/PointToPlane: "true"
+
+    # ─── Database ───
+    Rtabmap/DatabasePath: "~/.ros/rtabmap_rover.db"
+
+rtabmap_viz:
+  ros__parameters:
+    frame_id: base_link
+    odom_frame_id: odom
+    subscribe_depth: true
+    subscribe_odom_info: true
+    approx_sync: true
+    queue_size: 10
