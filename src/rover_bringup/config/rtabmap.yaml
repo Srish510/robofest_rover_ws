@@ -1,5 +1,5 @@
 # ─── RTAB-Map 3D SLAM Configuration ───
-# Optimized for Intel RealSense D435i on a ground rover
+# Optimized for Intel RealSense D455 on a ground rover
 
 rtabmap:
   ros__parameters:

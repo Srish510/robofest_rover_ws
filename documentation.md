@@ -1,6 +1,6 @@
 # Autonomous Rover - Project Documentation
 
-Complete technical documentation for an autonomous ground rover built with ROS 2 (Humble). The system uses an Intel RealSense D435i camera for perception, an ESP32 microcontroller for low-level motor control and IMU, and a Raspberry Pi 4 running ROS 2 as the main compute platform. The rover autonomously follows yellow lane boundaries, avoids obstacles, scans QR checkpoints, and streams telemetry to a Ground Control Station (GCS) over WiFi.
+Complete technical documentation for an autonomous ground rover built with ROS 2 (Humble). The system uses an Intel RealSense D455 camera for perception, an ESP32 microcontroller for low-level motor control and IMU, and a Raspberry Pi 4 running ROS 2 as the main compute platform. The rover autonomously follows yellow lane boundaries, avoids obstacles, scans QR checkpoints, and streams telemetry to a Ground Control Station (GCS) over WiFi.
 
 ---
 
@@ -82,6 +82,7 @@ rover_ws/
 │   ├── rover_perception/      # Camera driver, lane/obstacle/terrain/QR detection
 │   │   └── rover_perception/
 │   │       ├── realsense_node.py
+│   │       ├── laptop_depth_camera.py
 │   │       ├── lane_detector.py
 │   │       ├── depth_processor.py
 │   │       ├── terrain_mapper.py
@@ -230,7 +231,7 @@ Camera driver and all perception processing nodes. Depends on: `rclpy`, `sensor_
 
 #### 1. `realsense_node`
 
-Publishes camera frames (RGB and Depth) from an Intel RealSense D435i camera, as well as RealSense IMU data.
+Publishes camera frames (RGB and Depth) from an Intel RealSense D455 camera, as well as RealSense IMU data.
 
 **Parameters:**
 
@@ -259,6 +260,32 @@ Publishes camera frames (RGB and Depth) from an Intel RealSense D435i camera, as
 - Color stream uses `BGR8` for OpenCV compatibility.
 - Depth stream uses `16UC1` (millimeters).
 - Distortion model is assumed `plumb_bob` — change if using a different lens.
+
+---
+
+#### 1b. `laptop_depth_camera`
+
+Publishes RealSense-compatible image/depth topics using a laptop RGB webcam and monocular depth estimation for hardware-free testing.
+
+**Depth backends:**
+- `midas` (default)
+- `depth_anything`
+- Automatic heuristic fallback if model loading or inference fails
+
+**Key Parameters:**
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `camera_index` | `0` | Laptop webcam device index |
+| `color_width` | `640` | RGB image width |
+| `color_height` | `480` | RGB image height |
+| `fps` | `15` | Camera publish rate |
+| `depth_fps` | `5` | Monocular depth inference rate |
+| `depth_model` | `midas` | `midas` or `depth_anything` |
+| `min_depth_m` | `0.3` | Min mapped depth (m) |
+| `max_depth_m` | `5.0` | Max mapped depth (m) |
+
+**Published Topics:** Same as `realsense_node` except IMU (`camera/color/image_raw`, `camera/depth/image_raw`, `camera/aligned_depth/image_raw`, `camera/color/camera_info`, `camera/depth/camera_info`).
 
 ---
 
@@ -505,13 +532,13 @@ ESP32 hardware bridge, high-level motor controller, and odometry. Depends on: `r
 
 #### 1. `esp32_bridge`
 
-Bidirectional serial bridge between RPi4 (ROS 2) and ESP32 (low-level motor control, external IMU).
+Serial bridge between RPi4 (ROS 2) and ESP32 (low-level motor control, optional external IMU telemetry).
 
 **Serial Protocol (JSON over UART):**
 - **TX → ESP32:** `{"cmd": "motor", "fl_spd": 0.5, ..."fl_ang": 0.1, ...}`
 - **RX ← ESP32 (IMU):** `{"type": "imu", "ax":…, "gx":…, "roll":…, "pitch":…, "yaw":…}`
 
-No battery or current sensing — the ESP32 only provides IMU data.
+No battery or current sensing. RX telemetry can be disabled for TX-only command mode.
 
 **Parameters:**
 
@@ -525,6 +552,8 @@ No battery or current sensing — the ESP32 only provides IMU data.
 | `max_motor_speed` | `1.0` | Max motor speed for normalization |
 | `max_servo_angle_rad` | `0.5` | Max steering servo angle (rad) |
 | `publish_rate_hz` | `50.0` | Data publish rate (Hz) |
+| `drive_mode` | `differential` | Drive mode: `differential` (no steering servo actuation) or `servo` |
+| `expect_esp32_rx` | `false` | Enable ESP32 RX parsing thread for IMU telemetry |
 
 **Subscribed Topics:**
 
@@ -539,7 +568,11 @@ No battery or current sensing — the ESP32 only provides IMU data.
 | `esp32/imu_raw` | `Float32MultiArray` | `[ax, ay, az, gx, gy, gz, roll, pitch, yaw]` |
 | `rover/status` | `rover_interfaces/RoverStatus` | Aggregated rover status |
 
-**Behavior:** Converts `Twist` to 4-wheel speeds and steering angles using Ackermann-style kinematics, sends JSON over serial. Background thread reads ESP32 responses. Stops motors on shutdown.
+**Behavior:**
+- `drive_mode=differential` (default): fixed steering angles (`0`) with left/right differential wheel speeds.
+- `drive_mode=servo`: 4-wheel steering + speed distribution using Ackermann-style kinematics.
+- When `expect_esp32_rx=false` (default), runs TX-only and does not start serial RX thread.
+- Stops motors on shutdown.
 
 ---
 
@@ -661,7 +694,7 @@ Manages autonomous traversal with a state machine: `IDLE → NAVIGATING → CHEC
 
 Supports two operating modes:
 - **Legacy mode** (`use_nav2=False`): Publishes Twist commands to `nav/cmd_vel` for the custom navigation stack.
-- **Nav2 mode** (`use_nav2=True`): Sends goals to Nav2 via `NavigateToPose` action. Accepts goals from `goal_pose` (rviz2) and `waypoints` (PoseArray) topics. Manages waypoint queuing, checkpoint interruption, and goal resumption.
+- **Nav2 mode** (`use_nav2=True`): Sends goals to Nav2 via `NavigateToPose` action. By default, auto-starts an internal waypoint mission (no rviz2/external goal source required). Still accepts `goal_pose` and `waypoints` topics for manual overrides.
 
 **Parameters:**
 
@@ -674,6 +707,11 @@ Supports two operating modes:
 | `obstacle_critical_dist` | `0.4` | Obstacle distance for avoidance (m) |
 | `control_rate_hz` | `10.0` | Control loop rate (Hz) |
 | `use_nav2` | `false` | Enable Nav2 action client mode |
+| `auto_start_nav2_goals` | `true` | Auto-start internal waypoint mission in Nav2 mode |
+| `nav2_goal_frame` | `map` | Frame ID for internal waypoints |
+| `nav2_auto_waypoints_xy` | `[1.5,0.0,2.5,0.8,3.2,0.0,2.5,-0.8,1.5,0.0]` | Flat list of internal waypoint XY pairs |
+| `nav2_loop_waypoints` | `true` | Repeat internal waypoint route continuously |
+| `nav2_start_delay_sec` | `4.0` | Delay before first internal Nav2 goal (s) |
 
 **Subscribed Topics:**
 
@@ -697,7 +735,7 @@ Supports two operating modes:
 **Nav2 Action Client:** `navigate_to_pose` (`nav2_msgs/NavigateToPose`) — sends navigation goals to the Nav2 stack.
 
 **State Machine:**
-- **IDLE:** (Nav2 mode) Waiting for goal poses. (Legacy mode) Not used — starts in NAVIGATING.
+- **IDLE:** (Nav2 mode) waiting for internal auto-start or external goals. (Legacy mode) Not used — starts in NAVIGATING.
 - **NAVIGATING:** (Nav2) Nav2 handles path following; goal_manager monitors for QR checkpoints. (Legacy) Drive forward at `default_forward_speed`.
 - **OBSTACLE_AVOIDANCE:** (Legacy only) Slow to approach speed. Returns when obstacle clears 2× critical distance.
 - **CHECKPOINT_SCAN:** Full stop for `checkpoint_stop_duration_sec`. In Nav2 mode, cancels current goal and resumes after scan.
@@ -792,7 +830,7 @@ Streams live camera feed to GCS using MJPEG over HTTP. Also publishes ROS `Compr
 
 #### 2. `map_stream_node`
 
-Streams terrain map and occupancy grid data to GCS over HTTP as JSON. Supports Server-Sent Events (SSE) for real-time updates.
+Streams occupancy grid and depth-vision heatmap data to GCS over HTTP as JSON. Supports Server-Sent Events (SSE) for real-time updates.
 
 **Parameters:**
 
@@ -804,15 +842,16 @@ Streams terrain map and occupancy grid data to GCS over HTTP as JSON. Supports S
 
 **HTTP Endpoints:**
 - `GET /occupancy` — Latest occupancy grid as JSON (base64-encoded data)
-- `GET /terrain` — Latest terrain map as JSON (base64-encoded data)
-- `GET /stream` — SSE stream with both occupancy and terrain updates
+- `GET /depth_heatmap` — Latest depth heatmap as JSON (base64-encoded JPEG)
+- `GET /terrain` — Alias of `/depth_heatmap` for backward compatibility
+- `GET /stream` — SSE stream with occupancy and depth heatmap updates
 
 **Subscribed Topics:**
 
 | Topic | Type |
 |-------|------|
 | `perception/local_costmap` | `OccupancyGrid` |
-| `perception/terrain_map` | `rover_interfaces/TerrainMap` |
+| `camera/aligned_depth/image_raw` | `sensor_msgs/Image` |
 
 ---
 
@@ -865,9 +904,12 @@ Launch files and configuration for the complete system. Depends on: `rover_inter
 | `video_port` | `8080` | Video stream port |
 | `map_port` | `8081` | Map stream port |
 | `telemetry_port` | `8082` | Telemetry port |
+| `camera_source` | `realsense` | Camera source: `realsense` or `laptop` |
+| `camera_index` | `0` | Webcam index when `camera_source=laptop` |
+| `depth_model` | `midas` | Monocular depth model when `camera_source=laptop` |
 
 **Nodes launched:**
-- Perception: `realsense_node`, `lane_detector`, `obstacle_detector`, `depth_processor`, `qr_scanner`
+- Perception: camera source node (`realsense_node` or `laptop_depth_camera`), `lane_detector`, `obstacle_detector`, `depth_processor`, `qr_scanner`
 - Control: `esp32_bridge`, `motor_interface`, `odometry_node`
 - Navigation: `goal_manager`, `lane_costmap_layer`, `planner_helper`
 - Communication (2s delayed): `video_stream_node`, `map_stream_node`, `telemetry_node`
@@ -875,16 +917,27 @@ Launch files and configuration for the complete system. Depends on: `rover_inter
 ```bash
 ros2 launch rover_bringup rover.launch.py
 ros2 launch rover_bringup rover.launch.py serial_port:=/dev/ttyACM0
+ros2 launch rover_bringup rover.launch.py camera_source:=laptop camera_index:=0 depth_model:=midas
 ```
 
 ---
 
 ### `perception_test.launch.py`
 
-**Perception-only** — tests camera and detection pipeline without ESP32 or motor control. Includes static TF for `base_link → camera_color_optical_frame` and the video stream node.
+**Perception-only** — tests camera and detection pipeline without ESP32 or motor control. Includes static TF for `base_link → camera_color_optical_frame` and the video stream node. Supports selecting `realsense` or `laptop` camera source.
+
+**Launch Arguments:**
+
+| Argument | Default | Description |
+|----------|---------|-------------|
+| `camera_source` | `realsense` | Camera source: `realsense` or `laptop` |
+| `camera_index` | `0` | Webcam index when `camera_source=laptop` |
+| `depth_model` | `midas` | Monocular depth model when `camera_source=laptop` |
 
 ```bash
 ros2 launch rover_bringup perception_test.launch.py
+ros2 launch rover_bringup perception_test.launch.py camera_source:=laptop camera_index:=0 depth_model:=midas
+ros2 launch rover_bringup perception_test.launch.py camera_source:=laptop depth_model:=depth_anything
 ```
 
 ---
@@ -903,7 +956,7 @@ ros2 launch rover_bringup sim_test.launch.py
 
 ### `slam_3d.launch.py`
 
-**3D SLAM + Terrain Mapping** — launches RTAB-Map for visual SLAM with the RealSense D435i, plus the terrain mapper.
+**3D SLAM + Terrain Mapping** — launches RTAB-Map for visual SLAM with the RealSense D455, plus the terrain mapper.
 
 **Launch Arguments:**
 
@@ -913,6 +966,9 @@ ros2 launch rover_bringup sim_test.launch.py
 | `localization` | `false` | Localization-only mode (reuse existing map) |
 | `rviz` | `false` | Launch RTAB-Map visualization |
 | `delete_db` | `false` | Delete map database and start fresh |
+| `camera_source` | `realsense` | Camera source: `realsense` or `laptop` |
+| `camera_index` | `0` | Webcam index when `camera_source=laptop` |
+| `depth_model` | `midas` | Monocular depth model when `camera_source=laptop` |
 
 **Nodes launched:** Static TFs (base_link → camera_link → optical frames), `rtabmap` (SLAM), `rgbd_odometry` (visual odom), `depth_processor`, `terrain_mapper`, optional `rtabmap_viz`.
 
@@ -920,6 +976,7 @@ ros2 launch rover_bringup sim_test.launch.py
 ros2 launch rover_bringup slam_3d.launch.py
 ros2 launch rover_bringup slam_3d.launch.py localization:=true
 ros2 launch rover_bringup slam_3d.launch.py rviz:=true delete_db:=true
+ros2 launch rover_bringup slam_3d.launch.py camera_source:=laptop camera_index:=0 depth_model:=midas
 ```
 
 ---
@@ -939,11 +996,14 @@ ros2 launch rover_bringup slam_3d.launch.py rviz:=true delete_db:=true
 | `map_port` | `8081` | Map stream port |
 | `telemetry_port` | `8082` | Telemetry port |
 | `delete_db` | `false` | Delete RTAB-Map database and start fresh |
+| `camera_source` | `realsense` | Camera source: `realsense` or `laptop` |
+| `camera_index` | `0` | Webcam index when `camera_source=laptop` |
+| `depth_model` | `midas` | Monocular depth model when `camera_source=laptop` |
 
 **Architecture:**
 
 ```
-goal_pose / waypoints → goal_manager (Nav2 action client)
+internal auto-waypoints (default) OR goal_pose / waypoints → goal_manager
                               ↓
                     Nav2 NavigateToPose action
                               ↓
@@ -963,7 +1023,7 @@ goal_pose / waypoints → goal_manager (Nav2 action client)
 
 **Nodes launched:**
 - SLAM (via `slam_3d.launch.py`): `rtabmap`, `rgbd_odometry`, `depth_processor`, `terrain_mapper`, static TFs
-- Perception: `realsense_node`, `lane_detector`, `obstacle_detector`, `qr_scanner`
+- Perception: camera source node (`realsense_node` or `laptop_depth_camera`), `lane_detector`, `obstacle_detector`, `qr_scanner`
 - Control: `esp32_bridge`, `odometry_node`, `motor_interface` (Nav2 safety mode)
 - Navigation: `lane_costmap_layer`, `goal_manager` (Nav2 mode)
 - Nav2: `controller_server`, `planner_server`, `behavior_server`, `bt_navigator`, `lifecycle_manager_navigation`
@@ -979,19 +1039,27 @@ goal_pose / waypoints → goal_manager (Nav2 action client)
   - `ObstacleLayer`: Real-time depth camera obstacles for dynamic obstacle tracking
   - `InflationLayer`: Inflates obstacles for safe global path planning
 
-**Sending Goals:**
+**Running Without rviz2 / External Goal Sources (default):**
 ```bash
 # Launch the full navigation stack
 ros2 launch rover_bringup navigation.launch.py
 
+# Goal manager auto-starts internal waypoints after a short delay.
+
+# Use existing map (localization-only mode)
+ros2 launch rover_bringup navigation.launch.py localization:=true
+
+# Home testing with laptop camera + monocular depth
+ros2 launch rover_bringup navigation.launch.py camera_source:=laptop camera_index:=0 depth_model:=midas
+```
+
+**Optional Manual Goal Injection (still supported):**
+```bash
 # Send a goal via CLI
 ros2 topic pub --once /goal_pose geometry_msgs/PoseStamped \
   '{header: {frame_id: "map"}, pose: {position: {x: 2.0, y: 1.0}, orientation: {w: 1.0}}}'
 
-# Or use rviz2 "Nav2 Goal" button
-
-# Use existing map (localization-only mode)
-ros2 launch rover_bringup navigation.launch.py localization:=true
+# Or use rviz2 "Nav2 Goal" button (optional)
 ```
 
 ---
@@ -1004,7 +1072,7 @@ Central parameter file for all nodes. Organized by subsystem (Perception, Contro
 
 ### `rtabmap.yaml`
 
-RTAB-Map visual SLAM configuration optimized for Intel RealSense D435i on a ground rover:
+RTAB-Map visual SLAM configuration optimized for Intel RealSense D455 on a ground rover:
 - **Features:** ORB detector (fast for embedded), KD-tree matching
 - **Visual Odometry:** Frame-to-Map strategy with guess motion
 - **3D Grid:** Depth-based, 0.05m cells, 0.3–5.0m range, normals segmentation
@@ -1038,11 +1106,11 @@ Reference file pointing to `nav2_params.yaml` where all costmap layer configurat
 
 | Topic | Type | Publisher |
 |-------|------|----------|
-| `camera/color/image_raw` | `Image` | `realsense_node` |
-| `camera/depth/image_raw` | `Image` | `realsense_node` |
-| `camera/aligned_depth/image_raw` | `Image` | `realsense_node` |
-| `camera/color/camera_info` | `CameraInfo` | `realsense_node` |
-| `camera/depth/camera_info` | `CameraInfo` | `realsense_node` |
+| `camera/color/image_raw` | `Image` | `realsense_node` / `laptop_depth_camera` |
+| `camera/depth/image_raw` | `Image` | `realsense_node` / `laptop_depth_camera` |
+| `camera/aligned_depth/image_raw` | `Image` | `realsense_node` / `laptop_depth_camera` |
+| `camera/color/camera_info` | `CameraInfo` | `realsense_node` / `laptop_depth_camera` |
+| `camera/depth/camera_info` | `CameraInfo` | `realsense_node` / `laptop_depth_camera` |
 | `camera/imu` | `Imu` | `realsense_node` |
 | `perception/lane` | `Lane` | `lane_detector` |
 | `perception/lane_debug` | `Image` | `lane_detector` |
@@ -1077,8 +1145,8 @@ Reference file pointing to `nav2_params.yaml` where all costmap layer configurat
 | `navigation/lane_costmap` | `OccupancyGrid` | `lane_costmap_layer` |
 | `navigation/merged_costmap` | `OccupancyGrid` | `planner_helper` |
 | `navigation/avoidance_cmd` | `Twist` | `planner_helper` |
-| `goal_pose` | `PoseStamped` | External (rviz2 / user) → `goal_manager` |
-| `waypoints` | `PoseArray` | External → `goal_manager` |
+| `goal_pose` | `PoseStamped` | Optional external override (rviz2 / user) → `goal_manager` |
+| `waypoints` | `PoseArray` | Optional external override → `goal_manager` |
 
 ### Communication Topics
 
@@ -1110,4 +1178,4 @@ map (RTAB-Map)
 - `odom → base_link`: Published by `odometry_node` (dead-reckoning from IMU yaw + cmd_vel).
 - `map → odom`: Published by RTAB-Map (corrects drift via loop closures).
 - `base_link → camera_*`: Static transforms published in launch files.
-  - Camera mounted 0.15m forward, 0.3m above base_link, pitched down ~29° (-0.5 rad).
+- Camera mounted 0.15m forward, 0.3m above base_link, pitched down ~29° (-0.5 rad).

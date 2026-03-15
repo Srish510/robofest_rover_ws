@@ -26,6 +26,7 @@ class MockCamera(Node):
         self.declare_parameter('lane_sway_period_sec', 8.0)
         self.declare_parameter('show_obstacle', True)
         self.declare_parameter('obstacle_cycle_sec', 6.0)
+        self.declare_parameter('obstacle_course', 'single_moving')
         self.declare_parameter('show_qr', True)
         self.declare_parameter('qr_interval_sec', 15.0)
         self.declare_parameter('qr_display_duration_sec', 3.0)
@@ -37,7 +38,7 @@ class MockCamera(Node):
         self.bridge = CvBridge()
         self.start_time = time.time()
 
-        # Approximate D435i intrinsics
+        # Approximate D455 intrinsics
         self.fx = 615.0
         self.fy = 615.0
         self.cx = self.w / 2.0
@@ -55,6 +56,18 @@ class MockCamera(Node):
         self.timer = self.create_timer(1.0 / self.fps, self.publish_frame)
         self.get_logger().info(
             f'Mock camera started: {self.w}x{self.h} @ {self.fps}fps')
+
+    def _draw_obstacle(self, color, depth, cx, cy, half_w, half_h, depth_mm):
+        x1 = max(0, int(cx - half_w))
+        x2 = min(self.w, int(cx + half_w))
+        y1 = max(0, int(cy - half_h))
+        y2 = min(self.h, int(cy + half_h))
+        if x2 <= x1 or y2 <= y1:
+            return
+
+        cv2.rectangle(color, (x1, y1), (x2, y2), (30, 60, 120), -1)
+        cv2.rectangle(color, (x1, y1), (x2, y2), (20, 40, 80), 2)
+        depth[y1:y2, x1:x2] = int(depth_mm)
 
     def publish_frame(self):
         now = self.get_clock().now().to_msg()
@@ -122,19 +135,46 @@ class MockCamera(Node):
             d_m = 5.0 - frac * 4.7
             depth[row, :] = int(d_m * 1000)
 
-        # ─── Moving obstacle ───
+        # ─── Obstacle course ───
         if self.get_parameter('show_obstacle').value:
-            obs_cycle = self.get_parameter('obstacle_cycle_sec').value
+            obs_cycle = max(0.5, float(self.get_parameter('obstacle_cycle_sec').value))
             obs_phase = (t % obs_cycle) / obs_cycle
-            obs_cx = int(center_x + 80 * math.sin(2.0 * math.pi * obs_phase))
-            obs_y = int(h * 0.55)
-            x1 = max(0, obs_cx - 25)
-            x2 = min(w, obs_cx + 25)
-            y1 = max(0, obs_y - 30)
-            y2 = min(h, obs_y + 30)
-            cv2.rectangle(color, (x1, y1), (x2, y2), (30, 60, 120), -1)
-            cv2.rectangle(color, (x1, y1), (x2, y2), (20, 40, 80), 2)
-            depth[y1:y2, x1:x2] = 2000  # 2m
+            course = str(self.get_parameter('obstacle_course').value).strip().lower()
+
+            if course == 'slalom':
+                y_positions = [int(h * 0.48), int(h * 0.58), int(h * 0.68)]
+                amplitudes = [90, 75, 60]
+                phase_offsets = [0.0, 0.33, 0.66]
+                depth_values = [2300, 2000, 1700]
+                for y, amp, phase_offset, d_mm in zip(
+                        y_positions, amplitudes, phase_offsets, depth_values):
+                    cx = center_x + int(amp * math.sin(2.0 * math.pi * (obs_phase + phase_offset)))
+                    self._draw_obstacle(color, depth, cx, y, 22, 26, d_mm)
+
+            elif course == 'chicane':
+                self._draw_obstacle(color, depth, center_x - 95, int(h * 0.54), 32, 34, 2200)
+                self._draw_obstacle(color, depth, center_x + 105, int(h * 0.66), 32, 34, 1800)
+
+            elif course == 'center_block':
+                self._draw_obstacle(color, depth, center_x, int(h * 0.60), 38, 44, 1700)
+                gate_side = -1 if obs_phase < 0.5 else 1
+                self._draw_obstacle(color, depth, center_x + gate_side * 120, int(h * 0.74), 26, 28, 1400)
+
+            else:
+                # single_moving (default): one obstacle oscillating left-right
+                obs_cx = int(center_x + 80 * math.sin(2.0 * math.pi * obs_phase))
+                self._draw_obstacle(color, depth, obs_cx, int(h * 0.55), 25, 30, 2000)
+
+            cv2.putText(
+                color,
+                f'course: {course}',
+                (12, 28),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.65,
+                (235, 235, 235),
+                2,
+                cv2.LINE_AA,
+            )
 
         # ─── QR Code (periodic) ───
         if self.get_parameter('show_qr').value:

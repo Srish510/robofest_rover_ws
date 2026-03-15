@@ -1,6 +1,6 @@
 """
 3D Terrain Mapping with SLAM launch file.
-Launches RTAB-Map for visual SLAM + 3D mapping with the rover's RealSense D435i,
+Launches RTAB-Map for visual SLAM + 3D mapping with the rover's RealSense D455,
 along with the terrain mapper node for terrain analysis.
 
 Usage:
@@ -13,7 +13,7 @@ import os
 from launch import LaunchDescription
 from launch.actions import (
     DeclareLaunchArgument, GroupAction, OpaqueFunction,
-    SetEnvironmentVariable)
+    SetEnvironmentVariable, TimerAction)
 from launch.conditions import IfCondition, UnlessCondition
 from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
@@ -25,6 +25,12 @@ def launch_setup(context, *args, **kwargs):
     localization = LaunchConfiguration('localization')
     rviz = LaunchConfiguration('rviz')
     delete_db = LaunchConfiguration('delete_db')
+    video_port = LaunchConfiguration('video_port')
+    map_port = LaunchConfiguration('map_port')
+    telemetry_port = LaunchConfiguration('telemetry_port')
+    camera_source = LaunchConfiguration('camera_source')
+    camera_index = LaunchConfiguration('camera_index')
+    depth_model = LaunchConfiguration('depth_model')
     rtabmap_config = os.path.join(
         get_package_share_directory('rover_bringup'), 'config', 'rtabmap.yaml')
     rover_config = os.path.join(
@@ -34,6 +40,49 @@ def launch_setup(context, *args, **kwargs):
     # Delete database if requested (for fresh mapping)
     if context.perform_substitution(delete_db) == 'true' and os.path.exists(db_path):
         os.remove(db_path)
+
+    # ─── RealSense Camera ───
+    realsense = Node(
+        package='rover_perception',
+        executable='realsense_node',
+        name='realsense_node',
+        output='screen',
+        condition=IfCondition(PythonExpression([
+            "'", camera_source, "' == 'realsense'"
+        ])),
+        parameters=[{
+            'use_sim_time': use_sim_time,
+            'color_width': 640,
+            'color_height': 480,
+            'depth_width': 640,
+            'depth_height': 480,
+            'fps': 30,
+            'enable_imu': True,
+            'align_depth': True,
+        }])
+
+    laptop_depth_camera = Node(
+        package='rover_perception',
+        executable='laptop_depth_camera',
+        name='laptop_depth_camera',
+        output='screen',
+        condition=IfCondition(PythonExpression([
+            "'", camera_source, "' == 'laptop'"
+        ])),
+        parameters=[{
+            'use_sim_time': use_sim_time,
+            'camera_index': camera_index,
+            'color_width': 640,
+            'color_height': 480,
+            'fps': 15,
+            'depth_fps': 8,
+            'depth_model': depth_model,
+            'midas_model_type': 'MiDaS_small',
+            'prefer_fast_model': True,
+            'inference_width': 256,
+            'min_depth_m': 0.3,
+            'max_depth_m': 5.0,
+        }])
 
     # ─── Static TF: base_link → camera_link ───
     # Camera is mounted 0.15m forward, 0.3m up from base_link, tilted down
@@ -85,6 +134,7 @@ def launch_setup(context, *args, **kwargs):
         parameters=[{'use_sim_time': use_sim_time}])
 
     # ─── RTAB-Map SLAM Node ───
+    is_localization = context.perform_substitution(localization) == 'true'
     rtabmap_slam = Node(
         package='rtabmap_slam',
         executable='rtabmap',
@@ -95,10 +145,8 @@ def launch_setup(context, *args, **kwargs):
             {
                 'use_sim_time': use_sim_time,
                 'database_path': db_path,
-                'Mem/IncrementalMemory':
-                    PythonExpression(["'false' if '", localization, "' == 'true' else 'true'"]),
-                'Mem/InitWMWithAllNodes':
-                    PythonExpression(["'true' if '", localization, "' == 'true' else 'false'"]),
+                'Mem/IncrementalMemory': 'false' if is_localization else 'true',
+                'Mem/InitWMWithAllNodes': 'true' if is_localization else 'false',
             }],
         remappings=[
             ('rgb/image', 'camera/color/image_raw'),
@@ -189,7 +237,51 @@ def launch_setup(context, *args, **kwargs):
             ('odom', 'odom'),
         ])
 
+    # ─── GCS Communication Nodes (delayed start) ───
+    comm_group = TimerAction(
+        period=2.0,
+        actions=[
+            GroupAction([
+                Node(
+                    package='rover_comm',
+                    executable='video_stream_node',
+                    name='video_stream_node',
+                    output='screen',
+                    parameters=[{
+                        'stream_port': video_port,
+                        'jpeg_quality': 70,
+                        'max_fps': 15,
+                        'resize_width': 640,
+                        'resize_height': 480,
+                    }],
+                ),
+                Node(
+                    package='rover_comm',
+                    executable='map_stream_node',
+                    name='map_stream_node',
+                    output='screen',
+                    parameters=[{
+                        'map_port': map_port,
+                        'update_rate_hz': 2.0,
+                    }],
+                ),
+                Node(
+                    package='rover_comm',
+                    executable='telemetry_node',
+                    name='telemetry_node',
+                    output='screen',
+                    parameters=[{
+                        'telemetry_port': telemetry_port,
+                        'update_rate_hz': 5.0,
+                    }],
+                ),
+            ]),
+        ],
+    )
+
     return [
+        realsense,
+        laptop_depth_camera,
         camera_base_tf,
         camera_optical_tf,
         camera_depth_optical_tf,
@@ -199,6 +291,7 @@ def launch_setup(context, *args, **kwargs):
         depth_processor,
         terrain_mapper,
         rtabmap_viz,
+        comm_group,
     ]
 
 
@@ -218,6 +311,24 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'delete_db', default_value='false',
             description='Delete existing map database and start fresh'),
+        DeclareLaunchArgument(
+            'video_port', default_value='8080',
+            description='Video stream HTTP port'),
+        DeclareLaunchArgument(
+            'map_port', default_value='8081',
+            description='Map stream HTTP port'),
+        DeclareLaunchArgument(
+            'telemetry_port', default_value='8082',
+            description='Telemetry stream HTTP port'),
+        DeclareLaunchArgument(
+            'camera_source', default_value='realsense',
+            description='Camera source: realsense or laptop'),
+        DeclareLaunchArgument(
+            'camera_index', default_value='0',
+            description='Laptop webcam index for laptop mode'),
+        DeclareLaunchArgument(
+            'depth_model', default_value='midas',
+            description='Monocular depth model for laptop mode: midas or depth_anything'),
 
         OpaqueFunction(function=launch_setup),
     ])

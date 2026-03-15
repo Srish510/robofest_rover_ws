@@ -11,6 +11,8 @@ from geometry_msgs.msg import PoseStamped
 import json
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
+import socket
+import errno
 import time
 
 
@@ -97,6 +99,9 @@ class TelemetryNode(Node):
             status = self.latest_status
             pose = self.latest_pose
             checkpoints = list(self.checkpoints)
+            qr_detections = list(self.qr_detections)
+
+        last_qr = qr_detections[-1] if qr_detections else None
 
         telemetry = {
             'timestamp': time.time(),
@@ -104,6 +109,8 @@ class TelemetryNode(Node):
             'pose': None,
             'checkpoints': checkpoints,
             'total_checkpoints': len(checkpoints),
+            'last_qr_detection': last_qr,
+            'qr_detections': qr_detections,
         }
 
         if status:
@@ -134,6 +141,9 @@ class TelemetryNode(Node):
     def _start_telemetry_server(self, port):
         node = self
 
+        class ReusableHTTPServer(HTTPServer):
+            allow_reuse_address = True
+
         class TelemetryHandler(BaseHTTPRequestHandler):
             def do_GET(self):
                 if self.path == '/telemetry':
@@ -147,6 +157,15 @@ class TelemetryNode(Node):
                 elif self.path == '/checkpoints':
                     with node.data_lock:
                         data = json.dumps(node.checkpoints)
+                    self.send_response(200)
+                    self.send_header('Content-Type', 'application/json')
+                    self.send_header('Access-Control-Allow-Origin', '*')
+                    self.end_headers()
+                    self.wfile.write(data.encode())
+
+                elif self.path == '/qr_detections':
+                    with node.data_lock:
+                        data = json.dumps(node.qr_detections)
                     self.send_response(200)
                     self.send_header('Content-Type', 'application/json')
                     self.send_header('Access-Control-Allow-Origin', '*')
@@ -176,13 +195,32 @@ class TelemetryNode(Node):
                     self.end_headers()
                     self.wfile.write(
                         b'<html><body><h1>Rover Telemetry</h1>'
-                        b'<p>Endpoints: /telemetry, /checkpoints, /stream</p>'
+                        b'<p>Endpoints: /telemetry, /checkpoints, /qr_detections, /stream</p>'
                         b'</body></html>')
 
             def log_message(self, format, *args):
                 pass
 
-        server = HTTPServer(('0.0.0.0', port), TelemetryHandler)
+        server = None
+        last_exception = None
+        for attempt in range(3):
+            try:
+                server = ReusableHTTPServer(('0.0.0.0', port), TelemetryHandler)
+                break
+            except OSError as exc:
+                last_exception = exc
+                if exc.errno == errno.EADDRINUSE:
+                    self.get_logger().warn(
+                        f'Telemetry port {port} already in use (attempt {attempt + 1}/3). Retrying...')
+                else:
+                    self.get_logger().warn(
+                        f'Telemetry server bind failed (attempt {attempt + 1}/3): {exc}')
+                time.sleep(0.5)
+
+        if server is None:
+            raise RuntimeError(
+                f'Failed to start telemetry HTTP server on port {port}: {last_exception}')
+
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
 

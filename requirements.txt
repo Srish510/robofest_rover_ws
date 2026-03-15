@@ -3,3 +3,6 @@ opencv-python
 pyrealsense2
 pyzbar
 pyserial
+torch
+torchvision
+transformers

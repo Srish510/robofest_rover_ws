@@ -68,6 +68,8 @@ esp32_bridge:
     max_motor_speed: 1.0
     max_servo_angle_rad: 0.5
     publish_rate_hz: 50.0
+    drive_mode: differential  # servo or differential
+    expect_esp32_rx: false
 
 motor_interface:
   ros__parameters:

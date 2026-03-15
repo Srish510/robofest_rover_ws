@@ -1,6 +1,6 @@
 # ─── Nav2 Parameters for Autonomous Rover Navigation ───
 # Used with navigation.launch.py
-# Hardware: 4WD/4WS (4 independently driven and steered wheels), RealSense D435i, no wheel encoders
+# Hardware: 4WD/4WS (4 independently driven and steered wheels), RealSense D455, no wheel encoders
 # SLAM: RTAB-Map visual SLAM (launched via slam_3d.launch.py)
 # Costmap: Lane boundaries (via lane_costmap_layer) + depth obstacles + RTAB-Map map
 

@@ -3,11 +3,16 @@ Simulation test launch - runs the FULL rover pipeline with mock camera and
 mock ESP32 instead of real hardware. Use on any PC for testing.
 """
 from launch import LaunchDescription
-from launch.actions import GroupAction, TimerAction
+from launch.actions import DeclareLaunchArgument, GroupAction, TimerAction
+from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
 
 def generate_launch_description():
+    obstacle_course_arg = DeclareLaunchArgument(
+        'obstacle_course', default_value='slalom',
+        description='Mock obstacle course: single_moving, slalom, chicane, center_block')
+
     # ─── Mock hardware ───
     mock_group = GroupAction([
         Node(
@@ -21,6 +26,7 @@ def generate_launch_description():
                 'fps': 30,
                 'show_obstacle': True,
                 'obstacle_cycle_sec': 6.0,
+                'obstacle_course': LaunchConfiguration('obstacle_course'),
                 'show_qr': True,
                 'qr_interval_sec': 15.0,
                 'qr_display_duration_sec': 3.0,
@@ -146,6 +152,7 @@ def generate_launch_description():
     )
 
     return LaunchDescription([
+        obstacle_course_arg,
         mock_group,
         perception_group,
         control_group,

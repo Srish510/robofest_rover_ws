@@ -4,7 +4,8 @@ Launches all subsystems: perception, control, navigation, communication.
 """
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, GroupAction, TimerAction
-from launch.substitutions import LaunchConfiguration
+from launch.conditions import IfCondition
+from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
 
 
@@ -22,6 +23,15 @@ def generate_launch_description():
     telemetry_port_arg = DeclareLaunchArgument(
         'telemetry_port', default_value='8082',
         description='Telemetry HTTP port')
+    camera_source_arg = DeclareLaunchArgument(
+        'camera_source', default_value='realsense',
+        description='Camera source: realsense or laptop')
+    camera_index_arg = DeclareLaunchArgument(
+        'camera_index', default_value='0',
+        description='Laptop webcam index for laptop mode')
+    depth_model_arg = DeclareLaunchArgument(
+        'depth_model', default_value='midas',
+        description='Monocular depth model for laptop mode: midas or depth_anything')
 
     # ─── Perception Nodes ───
     perception_group = GroupAction([
@@ -30,6 +40,9 @@ def generate_launch_description():
             executable='realsense_node',
             name='realsense_node',
             output='screen',
+            condition=IfCondition(PythonExpression([
+                "'", LaunchConfiguration('camera_source'), "' == 'realsense'"
+            ])),
             parameters=[{
                 'color_width': 640,
                 'color_height': 480,
@@ -38,6 +51,28 @@ def generate_launch_description():
                 'fps': 30,
                 'enable_imu': True,
                 'align_depth': True,
+            }],
+        ),
+        Node(
+            package='rover_perception',
+            executable='laptop_depth_camera',
+            name='laptop_depth_camera',
+            output='screen',
+            condition=IfCondition(PythonExpression([
+                "'", LaunchConfiguration('camera_source'), "' == 'laptop'"
+            ])),
+            parameters=[{
+                'camera_index': LaunchConfiguration('camera_index'),
+                'color_width': 640,
+                'color_height': 480,
+                'fps': 15,
+                'depth_fps': 8,
+                'depth_model': LaunchConfiguration('depth_model'),
+                'midas_model_type': 'MiDaS_small',
+                'prefer_fast_model': True,
+                'inference_width': 256,
+                'min_depth_m': 0.3,
+                'max_depth_m': 5.0,
             }],
         ),
         Node(
@@ -110,6 +145,8 @@ def generate_launch_description():
                 'max_motor_speed': 1.0,
                 'max_servo_angle_rad': 0.5,
                 'publish_rate_hz': 50.0,
+                'drive_mode': 'differential',
+                'expect_esp32_rx': False,
             }],
         ),
         Node(
@@ -230,6 +267,9 @@ def generate_launch_description():
         video_port_arg,
         map_port_arg,
         telemetry_port_arg,
+        camera_source_arg,
+        camera_index_arg,
+        depth_model_arg,
         perception_group,
         control_group,
         navigation_group,

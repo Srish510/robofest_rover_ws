@@ -25,6 +25,7 @@ setup(
     entry_points={
         'console_scripts': [
             'realsense_node = rover_perception.realsense_node:main',
+            'laptop_depth_camera = rover_perception.laptop_depth_camera:main',
             'lane_detector = rover_perception.lane_detector:main',
             'obstacle_detector = rover_perception.obstacle_detector:main',
             'depth_processor = rover_perception.depth_processor:main',

@@ -39,6 +39,9 @@ def generate_launch_description():
     map_port = LaunchConfiguration('map_port')
     telemetry_port = LaunchConfiguration('telemetry_port')
     delete_db = LaunchConfiguration('delete_db')
+    camera_source = LaunchConfiguration('camera_source')
+    camera_index = LaunchConfiguration('camera_index')
+    depth_model = LaunchConfiguration('depth_model')
 
     # ─── Launch Arguments ───
     declare_args = [
@@ -51,6 +54,12 @@ def generate_launch_description():
         DeclareLaunchArgument('telemetry_port', default_value='8082'),
         DeclareLaunchArgument('delete_db', default_value='false',
                               description='Delete RTAB-Map database and start fresh'),
+        DeclareLaunchArgument('camera_source', default_value='laptop',
+                      description='Camera source: realsense or laptop'),
+        DeclareLaunchArgument('camera_index', default_value='0',
+                      description='Laptop webcam index for laptop mode'),
+        DeclareLaunchArgument('depth_model', default_value='midas',
+                      description='Monocular depth model for laptop mode: midas or depth_anything'),
     ]
 
     # ─── Include SLAM launch (RTAB-Map + TFs + depth_processor + terrain_mapper) ───
@@ -62,27 +71,14 @@ def generate_launch_description():
             'localization': localization,
             'rviz': 'false',
             'delete_db': delete_db,
+            'camera_source': camera_source,
+            'camera_index': camera_index,
+            'depth_model': depth_model,
         }.items(),
     )
 
-    # ─── Perception Nodes (depth_processor is in slam_3d) ───
+    # ─── Perception Nodes (camera + depth_processor are in slam_3d) ───
     perception_group = GroupAction([
-        Node(
-            package='rover_perception',
-            executable='realsense_node',
-            name='realsense_node',
-            output='screen',
-            parameters=[{
-                'use_sim_time': use_sim_time,
-                'color_width': 640,
-                'color_height': 480,
-                'depth_width': 640,
-                'depth_height': 480,
-                'fps': 30,
-                'enable_imu': True,
-                'align_depth': True,
-            }],
-        ),
         Node(
             package='rover_perception',
             executable='lane_detector',
@@ -145,6 +141,8 @@ def generate_launch_description():
                 'max_motor_speed': 1.0,
                 'max_servo_angle_rad': 0.5,
                 'publish_rate_hz': 50.0,
+                'drive_mode': 'differential',
+                'expect_esp32_rx': False,
             }],
         ),
         Node(
@@ -170,8 +168,8 @@ def generate_launch_description():
             parameters=[{
                 'use_sim_time': use_sim_time,
                 'nav2_mode': True,
-                'max_linear_speed': 0.5,
-                'max_angular_speed': 1.5,
+                'max_linear_speed': 0.35,
+                'max_angular_speed': 1.0,
                 'obstacle_stop_distance': 0.5,
                 'obstacle_slow_distance': 1.5,
                 'control_rate_hz': 20.0,
@@ -264,6 +262,11 @@ def generate_launch_description():
         parameters=[{
             'use_sim_time': use_sim_time,
             'use_nav2': True,
+            'auto_start_nav2_goals': True,
+            'nav2_goal_frame': 'map',
+            'nav2_auto_waypoints_xy': [0.7, 0.0, 1.0, 0.28, 1.25, 0.0, 1.0, -0.28, 0.7, 0.0],
+            'nav2_loop_waypoints': True,
+            'nav2_start_delay_sec': 4.0,
             'default_forward_speed': 0.3,
             'checkpoint_approach_speed': 0.15,
             'checkpoint_stop_duration_sec': 3.0,

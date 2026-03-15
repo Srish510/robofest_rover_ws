@@ -65,9 +65,7 @@ class LaneCostmapLayer(Node):
         costmap = np.full((height, width), -1, dtype=np.int8)
 
         if lane.left_detected and lane.right_detected and len(lane.left_boundary) > 1 and len(lane.right_boundary) > 1:
-            # Convert image-space lane boundaries to local ground coordinates
-            # Simple pinhole projection: x_ground = (u - cx) * z / fx
-            # Approximate z from v-coordinate assuming flat ground
+
             cam_h = self.get_parameter('camera_height_m').value
 
             left_ground = self._image_to_ground(lane.left_boundary, cam_h)

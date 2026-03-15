@@ -13,6 +13,9 @@ States:
 Nav2 mode accepts goal poses via:
   - /goal_pose topic (geometry_msgs/PoseStamped) — e.g. from rviz2
   - /waypoints topic (geometry_msgs/PoseArray) — sequence of goals
+
+Nav2 can also run fully standalone (no rviz2/external goal sources) using
+internally configured auto-waypoints.
 """
 import rclpy
 from rclpy.node import Node
@@ -43,6 +46,17 @@ class GoalManager(Node):
         self.declare_parameter('obstacle_critical_dist', 0.4)
         self.declare_parameter('control_rate_hz', 10.0)
         self.declare_parameter('use_nav2', False)
+        self.declare_parameter('auto_start_nav2_goals', True)
+        self.declare_parameter('nav2_goal_frame', 'map')
+        self.declare_parameter('nav2_auto_waypoints_xy', [
+            1.5, 0.0,
+            2.5, 0.8,
+            3.2, 0.0,
+            2.5, -0.8,
+            1.5, 0.0,
+        ])
+        self.declare_parameter('nav2_loop_waypoints', True)
+        self.declare_parameter('nav2_start_delay_sec', 4.0)
 
         self.use_nav2 = self.get_parameter('use_nav2').value
 
@@ -61,7 +75,9 @@ class GoalManager(Node):
         self._nav2_goal_handle = None
         self._nav2_active = False
         self._waypoint_queue = []
+        self._waypoint_template = []
         self._pending_goal = None  # goal to resume after checkpoint scan
+        self._autonomous_started = False
 
         # Subscribers
         self.odom_sub = self.create_subscription(
@@ -91,8 +107,17 @@ class GoalManager(Node):
             self.waypoints_sub = self.create_subscription(
                 PoseArray, 'waypoints', self._waypoints_callback, 10)
 
-            self.get_logger().info(
-                'Goal manager initialized (Nav2 mode) — waiting for goals')
+            self._load_auto_waypoints_from_params()
+            auto_start = bool(self.get_parameter('auto_start_nav2_goals').value)
+            if auto_start and self._waypoint_template:
+                delay = max(0.0, float(self.get_parameter('nav2_start_delay_sec').value))
+                self._autostart_timer = self.create_timer(delay, self._autostart_nav2_goals)
+                self.get_logger().info(
+                    f'Goal manager initialized (Nav2 mode) — auto-starting '
+                    f'{len(self._waypoint_template)} internal waypoints in {delay:.1f}s')
+            else:
+                self.get_logger().info(
+                    'Goal manager initialized (Nav2 mode) — waiting for goals')
         else:
             # Legacy mode: start navigating immediately
             self.state = self.NAVIGATING
@@ -153,8 +178,56 @@ class GoalManager(Node):
             f'Received {len(self._waypoint_queue)} waypoints')
         self._send_next_waypoint()
 
+    def _load_auto_waypoints_from_params(self):
+        """Load internal Nav2 waypoints from flat [x1, y1, x2, y2, ...] parameter."""
+        frame = str(self.get_parameter('nav2_goal_frame').value)
+        values = list(self.get_parameter('nav2_auto_waypoints_xy').value)
+        if len(values) < 2 or len(values) % 2 != 0:
+            self.get_logger().warn(
+                'nav2_auto_waypoints_xy must have an even count >= 2; auto-start disabled')
+            self._waypoint_template = []
+            return
+
+        waypoints = []
+        for i in range(0, len(values), 2):
+            ps = PoseStamped()
+            ps.header.frame_id = frame
+            ps.pose.position.x = float(values[i])
+            ps.pose.position.y = float(values[i + 1])
+            ps.pose.position.z = 0.0
+            ps.pose.orientation.x = 0.0
+            ps.pose.orientation.y = 0.0
+            ps.pose.orientation.z = 0.0
+            ps.pose.orientation.w = 1.0
+            waypoints.append(ps)
+
+        self._waypoint_template = waypoints
+
+    def _autostart_nav2_goals(self):
+        """Start internal waypoint mission when Nav2 mode is enabled."""
+        if self._autonomous_started:
+            return
+        self._autonomous_started = True
+        if hasattr(self, '_autostart_timer'):
+            self._autostart_timer.cancel()
+
+        self._refill_waypoint_queue_if_needed()
+        if self.state == self.IDLE and self._waypoint_queue:
+            self.get_logger().info('Starting autonomous Nav2 waypoint mission')
+            self._send_next_waypoint()
+
+    def _refill_waypoint_queue_if_needed(self):
+        if self._waypoint_queue:
+            return
+        if not self._waypoint_template:
+            return
+        self._waypoint_queue = [wp for wp in self._waypoint_template]
+
     def _send_next_waypoint(self):
         """Pop the next waypoint from the queue and send it to Nav2."""
+        if not self._waypoint_queue and bool(self.get_parameter('nav2_loop_waypoints').value):
+            self._refill_waypoint_queue_if_needed()
+
         if self._waypoint_queue:
             goal = self._waypoint_queue.pop(0)
             self._send_nav2_goal(goal)
