@@ -257,6 +257,3 @@ All tunable parameters are in `src/rover_bringup/config/rover_params.yaml`. Key 
 
 See [documentation.md](documentation.md) for complete technical documentation including all node parameters, topic maps, message definitions, algorithms, TF tree, and configuration details.
 
-## License
-
-Apache-2.0
