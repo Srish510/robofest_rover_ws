@@ -106,7 +106,7 @@ class LaneCostmapLayer(Node):
         # Publish OccupancyGrid
         msg = OccupancyGrid()
         msg.header.stamp = self.get_clock().now().to_msg()
-        msg.header.frame_id = 'base_link'
+        msg.header.frame_id = 'camera_link'
         msg.info.resolution = res
         msg.info.width = width
         msg.info.height = height

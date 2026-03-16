@@ -4,7 +4,7 @@
 rtabmap:
   ros__parameters:
     # ─── General ───
-    frame_id: base_link
+    frame_id: camera_link
     odom_frame_id: odom
     map_frame_id: map
     subscribe_depth: true
@@ -91,7 +91,7 @@ rtabmap:
 
 rtabmap_viz:
   ros__parameters:
-    frame_id: base_link
+    frame_id: camera_link
     odom_frame_id: odom
     subscribe_depth: true
     subscribe_odom_info: true

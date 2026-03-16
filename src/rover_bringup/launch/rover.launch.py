@@ -2,14 +2,21 @@
 Main launch file for the autonomous rover system.
 Launches all subsystems: perception, control, navigation, communication.
 """
+import os
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, GroupAction, TimerAction
 from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
+from ament_index_python.packages import get_package_share_directory
 
 
 def generate_launch_description():
+    urdf_path = os.path.join(
+        get_package_share_directory('rover_description'), 'urdf', 'rover.urdf')
+    with open(urdf_path, 'r', encoding='utf-8') as urdf_file:
+        robot_description = urdf_file.read()
+
     # Launch arguments
     serial_port_arg = DeclareLaunchArgument(
         'serial_port', default_value='/dev/ttyUSB0',
@@ -35,6 +42,15 @@ def generate_launch_description():
 
     # ─── Perception Nodes ───
     perception_group = GroupAction([
+        Node(
+            package='robot_state_publisher',
+            executable='robot_state_publisher',
+            name='robot_state_publisher',
+            output='screen',
+            parameters=[{
+                'robot_description': robot_description,
+            }],
+        ),
         Node(
             package='rover_perception',
             executable='realsense_node',
@@ -171,9 +187,15 @@ def generate_launch_description():
             name='odometry_node',
             output='screen',
             parameters=[{
-                'publish_tf': True,
+                'publish_tf': False,
                 'odom_rate_hz': 50.0,
                 'speed_scale': 1.0,
+                'imu_source': PythonExpression([
+                    "'realsense' if '", LaunchConfiguration('camera_source'), "' == 'realsense' else 'esp32'"
+                ]),
+                'imu_topic': 'camera/imu',
+                'legacy_imu_topic': 'esp32/imu_raw',
+                'child_frame_id': 'camera_link',
             }],
         ),
     ])

@@ -2,15 +2,21 @@
 Perception-only launch file for testing camera and detection pipeline
 without ESP32 or motor control.
 """
+import os
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
+from ament_index_python.packages import get_package_share_directory
 
 
 def generate_launch_description():
     camera_source = LaunchConfiguration('camera_source')
+    urdf_path = os.path.join(
+        get_package_share_directory('rover_description'), 'urdf', 'rover.urdf')
+    with open(urdf_path, 'r', encoding='utf-8') as urdf_file:
+        robot_description = urdf_file.read()
 
     return LaunchDescription([
         DeclareLaunchArgument(
@@ -93,14 +99,32 @@ def generate_launch_description():
             name='qr_scanner',
             output='both',
         ),
-        # Static TF: base_link -> camera_link
+        Node(
+            package='robot_state_publisher',
+            executable='robot_state_publisher',
+            name='robot_state_publisher',
+            output='both',
+            parameters=[{
+                'robot_description': robot_description,
+            }],
+        ),
+        # Static TF: camera_link -> camera_color_optical_frame
         Node(
             package='tf2_ros',
             executable='static_transform_publisher',
-            name='base_to_camera_tf',
+            name='camera_to_color_optical_tf',
             arguments=[
-                '0.15', '0', '0.3', '0', '0.5', '0',
-                'base_link', 'camera_color_optical_frame'
+                '0', '0', '0', '-1.5708', '0', '-1.5708',
+                'camera_link', 'camera_color_optical_frame'
+            ],
+        ),
+        Node(
+            package='tf2_ros',
+            executable='static_transform_publisher',
+            name='camera_to_depth_optical_tf',
+            arguments=[
+                '0', '0', '0', '-1.5708', '0', '-1.5708',
+                'camera_link', 'camera_depth_optical_frame'
             ],
         ),
         # Video stream for viewing

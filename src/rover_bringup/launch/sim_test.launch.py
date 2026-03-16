@@ -2,13 +2,20 @@
 Simulation test launch - runs the FULL rover pipeline with mock camera and
 mock ESP32 instead of real hardware. Use on any PC for testing.
 """
+import os
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, GroupAction, TimerAction
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+from ament_index_python.packages import get_package_share_directory
 
 
 def generate_launch_description():
+    urdf_path = os.path.join(
+        get_package_share_directory('rover_description'), 'urdf', 'rover.urdf')
+    with open(urdf_path, 'r', encoding='utf-8') as urdf_file:
+        robot_description = urdf_file.read()
+
     obstacle_course_arg = DeclareLaunchArgument(
         'obstacle_course', default_value='slalom',
         description='Mock obstacle course: single_moving, slalom, chicane, center_block')
@@ -43,14 +50,32 @@ def generate_launch_description():
                 'publish_rate_hz': 50.0,
             }],
         ),
-        # Static TF
+        Node(
+            package='robot_state_publisher',
+            executable='robot_state_publisher',
+            name='robot_state_publisher',
+            output='screen',
+            parameters=[{
+                'robot_description': robot_description,
+            }],
+        ),
+        # Static TFs for camera optical frames
         Node(
             package='tf2_ros',
             executable='static_transform_publisher',
-            name='base_to_camera_tf',
+            name='camera_to_color_optical_tf',
             arguments=[
-                '0.15', '0', '0.3', '0', '0.5', '0',
-                'base_link', 'camera_color_optical_frame'
+                '0', '0', '0', '-1.5708', '0', '-1.5708',
+                'camera_link', 'camera_color_optical_frame'
+            ],
+        ),
+        Node(
+            package='tf2_ros',
+            executable='static_transform_publisher',
+            name='camera_to_depth_optical_tf',
+            arguments=[
+                '0', '0', '0', '-1.5708', '0', '-1.5708',
+                'camera_link', 'camera_depth_optical_frame'
             ],
         ),
     ])
@@ -96,6 +121,12 @@ def generate_launch_description():
             executable='odometry_node',
             name='odometry_node',
             output='screen',
+            parameters=[{
+                'publish_tf': False,
+                'imu_source': 'esp32',
+                'legacy_imu_topic': 'esp32/imu_raw',
+                'child_frame_id': 'camera_link',
+            }],
         ),
     ])
 

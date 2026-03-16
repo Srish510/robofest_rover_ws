@@ -1,22 +1,4 @@
-"""
-Goal manager node - manages waypoint navigation, checkpoint sequencing,
-and state machine for autonomous traversal between checkpoints.
 
-Supports two modes:
-  - Legacy mode (use_nav2=False): Publishes Twist to nav/cmd_vel (default)
-  - Nav2 mode (use_nav2=True): Sends goals to Nav2 via NavigateToPose action
-
-States:
-  IDLE -> NAVIGATING -> CHECKPOINT_SCAN -> NAVIGATING -> ...
-  Any state -> OBSTACLE_AVOIDANCE -> Previous state
-
-Nav2 mode accepts goal poses via:
-  - /goal_pose topic (geometry_msgs/PoseStamped) — e.g. from rviz2
-  - /waypoints topic (geometry_msgs/PoseArray) — sequence of goals
-
-Nav2 can also run fully standalone (no rviz2/external goal sources) using
-internally configured auto-waypoints.
-"""
 import rclpy
 from rclpy.node import Node
 from rclpy.action import ActionClient

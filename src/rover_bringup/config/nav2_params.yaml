@@ -7,7 +7,7 @@
 bt_navigator:
   ros__parameters:
     global_frame: map
-    robot_base_frame: base_link
+    robot_base_frame: camera_link
     odom_topic: odom
     bt_loop_duration: 10
     default_server_timeout: 20
@@ -160,7 +160,7 @@ behavior_server:
     wait:
       plugin: "nav2_behaviors/Wait"
     global_frame: odom
-    robot_base_frame: base_link
+    robot_base_frame: camera_link
     transform_tolerance: 0.1
     simulate_ahead_time: 2.0
     max_rotational_vel: 1.0
@@ -175,7 +175,7 @@ local_costmap:
       update_frequency: 5.0
       publish_frequency: 2.0
       global_frame: odom
-      robot_base_frame: base_link
+      robot_base_frame: camera_link
       rolling_window: true
       width: 5
       height: 5
@@ -211,7 +211,7 @@ local_costmap:
           raytrace_min_range: 0.3
 
       # Lane boundary costmap from lane_costmap_layer node
-      # Published as OccupancyGrid on /navigation/lane_costmap in base_link frame
+      # Published as OccupancyGrid on /navigation/lane_costmap in camera_link frame
       lane_boundary_layer:
         plugin: "nav2_costmap_2d::StaticLayer"
         enabled: true
@@ -232,7 +232,7 @@ global_costmap:
       update_frequency: 1.0
       publish_frequency: 0.5
       global_frame: map
-      robot_base_frame: base_link
+      robot_base_frame: camera_link
       robot_radius: 0.20
       resolution: 0.05
       track_unknown_space: true

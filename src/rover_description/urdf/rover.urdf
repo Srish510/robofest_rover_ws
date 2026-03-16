@@ -1,0 +1,57 @@
+<?xml version="1.0"?>
+<robot name="rover">
+	<link name="base_link">
+		<!-- <inertial> -->
+			<!-- <origin xyz="0 0 0" rpy="0 0 0"/>
+			<mass value="10.0"/>
+			<inertia ixx="0.20" ixy="0.0" ixz="0.0" iyy="0.35" iyz="0.0" izz="0.45"/>
+		</inertial> -->
+
+		<visual>
+			<origin xyz="0 0 0.15" rpy="0 0 0"/>
+			<geometry>
+				<box size="0.45 0.44 0.33"/>
+			</geometry>
+			<material name="gray">
+				<color rgba="0.6 0.6 0.6 1.0"/>
+			</material>
+		</visual>
+
+		<!-- <collision>
+			<origin xyz="0 0 0.1" rpy="0 0 0"/>
+			<geometry>
+				<box size="0.45 0.44 0.33"/>
+			</geometry>
+		</collision> -->
+	</link>
+	<link name="camera_link">
+		<visual>
+			<origin xyz="0.2 0 0.03" rpy="0 0 0" />
+			<geometry>
+				<!-- <mesh filename="package://package_name/meshes/mesh.stl" /> -->
+				<box size="0.03 0.12 0.03" />
+			</geometry>
+			<material name="material_name">
+				<color rgba="1 0 0 1" />
+			</material>
+		</visual>
+		<!-- <collision>
+			<origin xyz="0 0 0" rpy="0 0 0" />
+			<geometry>
+				<mesh filename="package://package_name/meshes/mesh.stl" />
+			</geometry>
+		</collision>
+		<inertial>
+			<mass value="1.0" />
+			<origin xyz="0 0 0" />
+			<inertia ixx="1.0" ixy="0.0" ixz="0.0" iyy="1.0" iyz="0.0" izz="1.0" />
+		</inertial> -->
+	</link>
+	<joint name="base_to_camera" type="fixed">
+		<parent link="base_link" />
+		<child link="camera_link" />
+		<origin xyz="0 0 0.3" rpy="0 0 0" />
+		<axis xyz="1 0 0" />
+		<!-- <limit lower="-1.0" upper="1.0" effort="100" velocity="100" /> -->
+	</joint>
+</robot>

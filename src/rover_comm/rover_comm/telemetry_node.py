@@ -11,9 +11,14 @@ from geometry_msgs.msg import PoseStamped
 import json
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
-import socket
 import errno
 import time
+from urllib.parse import urlsplit
+
+try:
+    from http.server import ThreadingHTTPServer
+except ImportError:
+    ThreadingHTTPServer = HTTPServer
 
 
 class TelemetryNode(Node):
@@ -138,52 +143,77 @@ class TelemetryNode(Node):
 
         return telemetry
 
+    @staticmethod
+    def _json_default(value):
+        """Convert non-standard numeric types (e.g. numpy scalars) for JSON."""
+        if hasattr(value, 'item'):
+            return value.item()
+        if hasattr(value, 'tolist'):
+            return value.tolist()
+        raise TypeError(f'Object of type {value.__class__.__name__} is not JSON serializable')
+
     def _start_telemetry_server(self, port):
         node = self
 
-        class ReusableHTTPServer(HTTPServer):
+        class ReusableThreadingHTTPServer(ThreadingHTTPServer):
             allow_reuse_address = True
+            daemon_threads = True
 
         class TelemetryHandler(BaseHTTPRequestHandler):
             def do_GET(self):
-                if self.path == '/telemetry':
-                    data = json.dumps(node._get_telemetry_dict())
+                request_path = urlsplit(self.path).path
+
+                if request_path == '/telemetry':
+                    data = json.dumps(node._get_telemetry_dict(), default=node._json_default)
                     self.send_response(200)
                     self.send_header('Content-Type', 'application/json')
+                    self.send_header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
+                    self.send_header('Pragma', 'no-cache')
+                    self.send_header('Expires', '0')
                     self.send_header('Access-Control-Allow-Origin', '*')
                     self.end_headers()
                     self.wfile.write(data.encode())
 
-                elif self.path == '/checkpoints':
+                elif request_path == '/checkpoints':
                     with node.data_lock:
-                        data = json.dumps(node.checkpoints)
+                        data = json.dumps(node.checkpoints, default=node._json_default)
                     self.send_response(200)
                     self.send_header('Content-Type', 'application/json')
+                    self.send_header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
+                    self.send_header('Pragma', 'no-cache')
+                    self.send_header('Expires', '0')
                     self.send_header('Access-Control-Allow-Origin', '*')
                     self.end_headers()
                     self.wfile.write(data.encode())
 
-                elif self.path == '/qr_detections':
+                elif request_path == '/qr_detections':
                     with node.data_lock:
-                        data = json.dumps(node.qr_detections)
+                        data = json.dumps(node.qr_detections, default=node._json_default)
                     self.send_response(200)
                     self.send_header('Content-Type', 'application/json')
+                    self.send_header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
+                    self.send_header('Pragma', 'no-cache')
+                    self.send_header('Expires', '0')
                     self.send_header('Access-Control-Allow-Origin', '*')
                     self.end_headers()
                     self.wfile.write(data.encode())
 
-                elif self.path == '/stream':
+                elif request_path == '/stream':
                     # SSE for real-time telemetry
                     self.send_response(200)
                     self.send_header('Content-Type', 'text/event-stream')
                     self.send_header('Cache-Control', 'no-cache')
+                    self.send_header('Connection', 'keep-alive')
+                    self.send_header('X-Accel-Buffering', 'no')
                     self.send_header('Access-Control-Allow-Origin', '*')
                     self.end_headers()
+                    self.wfile.write(b'retry: 2000\n\n')
+                    self.wfile.flush()
                     rate = node.get_parameter('update_rate_hz').value
                     interval = 1.0 / rate
                     try:
                         while rclpy.ok():
-                            data = json.dumps(node._get_telemetry_dict())
+                            data = json.dumps(node._get_telemetry_dict(), default=node._json_default)
                             self.wfile.write(f'data: {data}\n\n'.encode())
                             self.wfile.flush()
                             time.sleep(interval)
@@ -205,7 +235,7 @@ class TelemetryNode(Node):
         last_exception = None
         for attempt in range(3):
             try:
-                server = ReusableHTTPServer(('0.0.0.0', port), TelemetryHandler)
+                server = ReusableThreadingHTTPServer(('0.0.0.0', port), TelemetryHandler)
                 break
             except OSError as exc:
                 last_exception = exc

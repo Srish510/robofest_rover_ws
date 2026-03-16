@@ -35,7 +35,12 @@ def launch_setup(context, *args, **kwargs):
         get_package_share_directory('rover_bringup'), 'config', 'rtabmap.yaml')
     rover_config = os.path.join(
         get_package_share_directory('rover_bringup'), 'config', 'rover_params.yaml')
+    urdf_path = os.path.join(
+        get_package_share_directory('rover_description'), 'urdf', 'rover.urdf')
     db_path = os.path.expanduser('~/.ros/rtabmap_rover.db')
+
+    with open(urdf_path, 'r', encoding='utf-8') as urdf_file:
+        robot_description = urdf_file.read()
 
     # Delete database if requested (for fresh mapping)
     if context.perform_substitution(delete_db) == 'true' and os.path.exists(db_path):
@@ -84,18 +89,17 @@ def launch_setup(context, *args, **kwargs):
             'max_depth_m': 5.0,
         }])
 
-    # ─── Static TF: base_link → camera_link ───
-    # Camera is mounted 0.15m forward, 0.3m up from base_link, tilted down
-    camera_base_tf = Node(
-        package='tf2_ros',
-        executable='static_transform_publisher',
-        name='base_to_camera_tf',
-        arguments=[
-            '--x', '0.15', '--y', '0.0', '--z', '0.3',
-            '--roll', '0.0', '--pitch', '-0.5', '--yaw', '0.0',
-            '--frame-id', 'base_link',
-            '--child-frame-id', 'camera_link'],
-        parameters=[{'use_sim_time': use_sim_time}])
+    # ─── URDF TF: links and joints from rover_description ───
+    robot_state_publisher_node = Node(
+        package='robot_state_publisher',
+        executable='robot_state_publisher',
+        name='robot_state_publisher',
+        output='screen',
+        parameters=[{
+            'use_sim_time': use_sim_time,
+            'robot_description': robot_description,
+        }],
+    )
 
     # camera_link → camera_color_optical_frame (RealSense convention)
     camera_optical_tf = Node(
@@ -171,9 +175,9 @@ def launch_setup(context, *args, **kwargs):
             rtabmap_config,
             {
                 'use_sim_time': use_sim_time,
-                'frame_id': 'base_link',
+                'frame_id': 'camera_link',
                 'odom_frame_id': 'odom',
-                'publish_tf': False,  # wheel odom publishes TF
+                'publish_tf': True,
                 'wait_for_transform': 0.2,
                 'approx_sync': True,
                 'queue_size': 10,
@@ -184,7 +188,7 @@ def launch_setup(context, *args, **kwargs):
             ('rgb/image', 'camera/color/image_raw'),
             ('rgb/camera_info', 'camera/color/camera_info'),
             ('depth/image', 'camera/aligned_depth/image_raw'),
-            ('odom', 'rtabmap/visual_odom'),
+            ('odom', 'odom'),
         ])
 
     # ─── Depth Processor (SLAM-aware) ───
@@ -282,7 +286,7 @@ def launch_setup(context, *args, **kwargs):
     return [
         realsense,
         laptop_depth_camera,
-        camera_base_tf,
+        robot_state_publisher_node,
         camera_optical_tf,
         camera_depth_optical_tf,
         camera_imu_tf,

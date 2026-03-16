@@ -66,7 +66,7 @@ class MockESP32(Node):
         # Status
         status = RoverStatus()
         status.header.stamp = self.get_clock().now().to_msg()
-        status.header.frame_id = 'base_link'
+        status.header.frame_id = 'camera_link'
         status.servo_angles = [0.0, 0.0, 0.0, 0.0]
         status.orientation_euler = [0.0, 0.0, float(self.yaw)]
         status.angular_velocity = [0.0, 0.0, float(angular)]

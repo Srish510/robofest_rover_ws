@@ -1,16 +1,4 @@
-"""
-ESP32 serial bridge node - handles bidirectional communication between
-RPi4 (ROS2) and ESP32 (low-level motor control, external IMU).
 
-The rover has 4 independently driven wheels, each with a steering servo.
-Wheels: front_left (FL), front_right (FR), rear_left (RL), rear_right (RR).
-
-Protocol: JSON-based messages over serial UART.
-TX to ESP32: {"cmd": "motor",
-              "fl_spd": 0.5, "fr_spd": 0.5, "rl_spd": 0.5, "rr_spd": 0.5,
-              "fl_ang": 0.1, "fr_ang": 0.1, "rl_ang": -0.1, "rr_ang": -0.1}
-RX from ESP32: {"type": "imu", "ax":..., "gx":..., ...}
-"""
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import Twist
@@ -215,7 +203,7 @@ class ESP32Bridge(Node):
         # Publish rover status
         status = RoverStatus()
         status.header.stamp = now
-        status.header.frame_id = 'base_link'
+        status.header.frame_id = 'camera_link'
         if imu:
             status.orientation_euler = [
                 float(imu.get('roll', 0)),

@@ -23,7 +23,7 @@ from launch.actions import (
     SetEnvironmentVariable, TimerAction,
 )
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
 from ament_index_python.packages import get_package_share_directory
 
@@ -152,9 +152,15 @@ def generate_launch_description():
             output='screen',
             parameters=[{
                 'use_sim_time': use_sim_time,
-                'publish_tf': True,
+                'publish_tf': False,
                 'odom_rate_hz': 50.0,
                 'speed_scale': 1.0,
+                'imu_source': PythonExpression([
+                    "'realsense' if '", camera_source, "' == 'realsense' else 'esp32'"
+                ]),
+                'imu_topic': 'camera/imu',
+                'legacy_imu_topic': 'esp32/imu_raw',
+                'child_frame_id': 'camera_link',
             }],
         ),
         # Motor interface in Nav2 safety mode:
