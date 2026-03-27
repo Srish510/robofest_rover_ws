@@ -1,10 +1,3 @@
-"""
-Mock camera node - generates synthetic color+depth images with yellow lanes,
-a moving obstacle, and periodic QR codes. Replaces the realsense_node for testing.
-"""
-
-#NOTE: This code is fully AI-generated and not actually used in the final system, but it can be useful
-
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Image, CameraInfo
