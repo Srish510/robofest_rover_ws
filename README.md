@@ -10,7 +10,7 @@ An autonomous ground rover built with **ROS 2 Humble** that follows yellow lane 
 | **Intel RealSense D455** | RGB + Depth camera with onboard IMU |
 | **Laptop RGB webcam (optional)** | Home testing camera source with monocular depth |
 | **ESP32** | Low-level motor control, external IMU (AHRS) |
-| **4WD/4WS chassis** | Four independently driven and steered wheels (0.3 m wheelbase, 0.3 m track width) |
+| **4WD/4WS chassis** | Four independently driven and steered wheels (0.5 m wheelbase, 0.4 m track width) |
 
 ## Features
 
